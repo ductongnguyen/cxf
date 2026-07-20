@@ -1,0 +1,7 @@
+id: architecture
+title: System Architecture
+priority: 900
+tags: [architecture, core]
+framework: Node.js/TypeScript
+conventions:
+  - TypeScript Strict Mode
