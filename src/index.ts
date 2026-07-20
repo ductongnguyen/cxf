@@ -32,13 +32,21 @@ function askQuestion(query: string): Promise<string> {
 
 // cxf init
 program
-  .command('init')
+  .command('init [targetPath]')
   .description('Khởi tạo cấu trúc CXF v3 thông qua 7 Phase thông minh (Smart Init)')
   .option('-y, --yes', 'Tự động duyệt mọi đề xuất, không cần Human-in-the-loop')
-  .action(async (options) => {
+  .action(async (targetPath, options) => {
+    // Nếu targetPath là object, tức là user không truyền targetPath (do commander pass options vào param cuối)
+    if (typeof targetPath === 'object') {
+      options = targetPath;
+      targetPath = undefined;
+    }
     console.log(chalk.blue.bold('\n🚀 CXF Smart Init: Bắt đầu quy trình 7 bước...'));
-    const targetDir = process.cwd();
-    const cxfDir = path.join(targetDir, '.cxf');
+    const wrapperDir = process.cwd();
+    const cxfDir = path.join(wrapperDir, '.cxf');
+    const targetDir = targetPath ? path.resolve(wrapperDir, targetPath) : wrapperDir;
+    const relativeTarget = targetPath ? path.relative(wrapperDir, targetDir) : undefined;
+
 
     // Phase 1: Discovery
     console.log(chalk.cyan('\n[Phase 1/7] Discovery (Khám phá dự án)...'));
@@ -192,7 +200,11 @@ ${detectedModules.map(m => `  - ${m}`).join('\n')}
 `;
       fs.writeFileSync(path.join(knowledgeDir, 'modules.yaml'), modulesYaml);
     }
-    fs.writeFileSync(path.join(cxfDir, 'config.json'), JSON.stringify({ version: "3.1.0" }, null, 2));
+    const configData: any = { version: "3.1.0" };
+    if (relativeTarget) {
+      configData.targetRepoPath = relativeTarget;
+    }
+    fs.writeFileSync(path.join(cxfDir, 'config.json'), JSON.stringify(configData, null, 2));
 
     // Tự động sinh Project-specific Rules (rules/global.md)
     let globalRules = `---
@@ -347,10 +359,21 @@ program
   .description('Đồng bộ tăng dần (Incremental Sync) khi có file/module mới')
   .action(() => {
     console.log(chalk.blue('🔄 Đang chạy đồng bộ tăng dần (Sync)...'));
-    console.log(chalk.dim('Quét hệ thống file tại ./src/...'));
-    const targetDir = process.cwd();
+    const wrapperDir = process.cwd();
+    const cxfDir = path.join(wrapperDir, '.cxf');
+    let targetDir = wrapperDir;
+    
+    const configPath = path.join(cxfDir, 'config.json');
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      if (config.targetRepoPath) {
+        targetDir = path.resolve(wrapperDir, config.targetRepoPath);
+      }
+    }
+    
     const srcDir = path.join(targetDir, 'src');
-    const knowledgeDir = path.join(targetDir, '.cxf', 'knowledge');
+    console.log(chalk.dim(`Quét hệ thống file tại ${srcDir}...`));
+    const knowledgeDir = path.join(cxfDir, 'knowledge');
     
     if (!fs.existsSync(srcDir)) {
       console.log(chalk.yellow('⚠️  Không tìm thấy thư mục src/. Bỏ qua việc quét module.'));
