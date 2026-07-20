@@ -31,6 +31,29 @@ function askQuestion(query) {
         resolve(ans);
     }));
 }
+/** Smart Module Discovery */
+function discoverModules(targetDir) {
+    const ignoreList = new Set(['node_modules', '.git', 'dist', 'build', 'out', '.next', 'vendor', '.cxf', 'docs', 'public', 'storage', 'tests', 'ci', 'bin', 'scripts', 'resources', 'config', 'database', 'bootstrap']);
+    const getSubDirs = (dir) => {
+        if (!fs_1.default.existsSync(dir))
+            return [];
+        return fs_1.default.readdirSync(dir, { withFileTypes: true })
+            .filter(e => e.isDirectory() && !e.name.startsWith('.') && !ignoreList.has(e.name))
+            .map(e => e.name);
+    };
+    // 1. Core-Dir Priority
+    const coreDirs = ['app', 'src', 'lib', 'pkg'];
+    for (const core of coreDirs) {
+        const corePath = path_1.default.join(targetDir, core);
+        if (fs_1.default.existsSync(corePath)) {
+            const modules = getSubDirs(corePath);
+            if (modules.length > 0)
+                return modules;
+        }
+    }
+    // 2. Fallback to Root
+    return getSubDirs(targetDir);
+}
 // cxf init
 program
     .command('init [targetPath]')
@@ -62,27 +85,9 @@ program
     if (hasComposer)
         framework = 'PHP/Laravel';
     console.log(`> Detected Stack: ${chalk_1.default.green(framework)}`);
-    // Phase 3 & 4: Module & Convention Detection
-    console.log(chalk_1.default.cyan('\n[Phase 3 & 4/7] Module & Convention Detection...'));
-    const detectedModules = [];
-    if (fs_1.default.existsSync(targetDir)) {
-        const entries = fs_1.default.readdirSync(targetDir, { withFileTypes: true });
-        for (const entry of entries) {
-            if (entry.isDirectory() && !['node_modules', '.git', 'dist', 'build', 'out', '.next', 'vendor', '.cxf'].includes(entry.name)) {
-                detectedModules.push(entry.name);
-            }
-        }
-    }
-    // Fallback: nếu không thấy module nào, có thể fallback
-    if (detectedModules.length > 0) {
-        console.log(chalk_1.default.green(`✅ Đã tìm thấy ${detectedModules.length} modules tiềm năng.`));
-    }
-    else {
-        console.log(chalk_1.default.yellow(`⚠️ Không tìm thấy thư mục module nào.`));
-    }
     const detectedConventions = [];
-    // Real Convention Inference & Code Style Extraction
     const codeStyles = [];
+    // Base package.json detection
     if (hasPackageJson) {
         try {
             const pkgContent = fs_1.default.readFileSync(path_1.default.join(targetDir, 'package.json'), 'utf-8');
@@ -103,11 +108,9 @@ program
         }
         catch (e) { }
     }
-    if (hasComposer) {
-        detectedConventions.push({ name: 'Laravel/PHP MVC', confidence: 0.8 });
-    }
     // Python Detection
     if (fs_1.default.existsSync(path_1.default.join(targetDir, 'requirements.txt')) || fs_1.default.existsSync(path_1.default.join(targetDir, 'pyproject.toml'))) {
+        framework = 'Python Backend';
         detectedConventions.push({ name: 'Python Backend', confidence: 0.85 });
         try {
             const req = fs_1.default.readFileSync(path_1.default.join(targetDir, 'requirements.txt'), 'utf-8');
@@ -118,9 +121,40 @@ program
         }
         catch (e) { }
     }
-    // Go Detection
-    if (fs_1.default.existsSync(path_1.default.join(targetDir, 'go.mod'))) {
-        detectedConventions.push({ name: 'Golang Standard Layout', confidence: 0.9 });
+    // Deep Architecture Inference
+    if (framework === 'PHP/Laravel') {
+        detectedConventions.push({ name: 'Laravel/PHP MVC', confidence: 0.8 });
+        if (fs_1.default.existsSync(path_1.default.join(targetDir, 'app', 'Services')))
+            detectedConventions.push({ name: 'Service Pattern (Thin Controllers, Fat Services)', confidence: 0.95 });
+        if (fs_1.default.existsSync(path_1.default.join(targetDir, 'app', 'Repositories')))
+            detectedConventions.push({ name: 'Repository Pattern', confidence: 0.95 });
+        if (fs_1.default.existsSync(path_1.default.join(targetDir, 'app', 'Http', 'Livewire')))
+            detectedConventions.push({ name: 'Livewire Components', confidence: 0.95 });
+        if (fs_1.default.existsSync(path_1.default.join(targetDir, 'resources', 'js', 'Pages')))
+            detectedConventions.push({ name: 'Inertia.js Frontend', confidence: 0.95 });
+    }
+    if (framework === 'Node.js/TypeScript') {
+        if (fs_1.default.existsSync(path_1.default.join(targetDir, 'src', 'controllers')) && fs_1.default.existsSync(path_1.default.join(targetDir, 'src', 'services'))) {
+            detectedConventions.push({ name: 'Controller-Service Layered Architecture', confidence: 0.9 });
+        }
+        if (fs_1.default.existsSync(path_1.default.join(targetDir, 'src', 'graphql'))) {
+            detectedConventions.push({ name: 'GraphQL API', confidence: 0.9 });
+        }
+    }
+    if (framework === 'Golang') {
+        detectedConventions.push({ name: 'Golang Standard Layout', confidence: 0.8 });
+        if (fs_1.default.existsSync(path_1.default.join(targetDir, 'cmd')) && fs_1.default.existsSync(path_1.default.join(targetDir, 'internal'))) {
+            detectedConventions.push({ name: 'Golang Standard Project Layout', confidence: 0.95 });
+        }
+    }
+    // Phase 3 & 4: Module & Convention Detection
+    console.log(chalk_1.default.cyan('\n[Phase 3 & 4/7] Module & Convention Detection...'));
+    const detectedModules = discoverModules(targetDir);
+    if (detectedModules.length > 0) {
+        console.log(chalk_1.default.green(`✅ Đã tìm thấy ${detectedModules.length} modules tiềm năng.`));
+    }
+    else {
+        console.log(chalk_1.default.yellow(`⚠️ Không tìm thấy thư mục module nào.`));
     }
     // Extract Prettier
     if (fs_1.default.existsSync(path_1.default.join(targetDir, '.prettierrc'))) {
@@ -274,6 +308,16 @@ tags: [rules, guardrails]
         globalRules += `- Sử dụng Eloquent đúng chuẩn, tránh viết raw SQL.\n`;
         globalRules += `- Inject dependencies thông qua constructor thay vì gọi trực tiếp từ Service Container.\n\n`;
     }
+    if (finalConventions.includes('Service Pattern (Thin Controllers, Fat Services)')) {
+        globalRules += `## ${ruleIndex++}. Service Pattern\n`;
+        globalRules += `- Controller tuyệt đối không chứa business logic, chỉ xử lý Request/Response.\n`;
+        globalRules += `- Mọi logic tính toán, gọi external API, xử lý phức tạp phải đặt trong thư mục Services/.\n\n`;
+    }
+    if (finalConventions.includes('Repository Pattern')) {
+        globalRules += `## ${ruleIndex++}. Repository Pattern\n`;
+        globalRules += `- Service không tương tác trực tiếp với Database/Eloquent Model.\n`;
+        globalRules += `- Mọi logic Query (where, join, order) phải nằm trong Repository.\n\n`;
+    }
     if (codeStyles.length > 0) {
         globalRules += `## ${ruleIndex++}. Code Style & Conventions (Auto-detected)\n`;
         for (const style of codeStyles) {
@@ -370,13 +414,7 @@ program
     if (!fs_1.default.existsSync(knowledgeDir)) {
         fs_1.default.mkdirSync(knowledgeDir, { recursive: true });
     }
-    const entries = fs_1.default.readdirSync(targetDir, { withFileTypes: true });
-    const modules = [];
-    for (const entry of entries) {
-        if (entry.isDirectory() && !['node_modules', '.git', 'dist', 'build', 'out', '.next', 'vendor', '.cxf'].includes(entry.name)) {
-            modules.push(entry.name);
-        }
-    }
+    const modules = discoverModules(targetDir);
     if (modules.length > 0) {
         console.log(chalk_1.default.green(`✅ Phát hiện ${modules.length} module: ${modules.join(', ')}`));
         const syncYaml = `id: sync_modules\ntitle: Dynamically Synced Modules\npriority: 700\ntags: [sync, auto]\nmodules:\n${modules.map(m => `  - ${m}`).join('\n')}\n`;
