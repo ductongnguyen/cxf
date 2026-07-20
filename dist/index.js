@@ -54,6 +54,56 @@ function discoverModules(targetDir) {
     // 2. Fallback to Root
     return getSubDirs(targetDir);
 }
+/** Check if file is binary or large lock file */
+function isBinaryFile(filename) {
+    const ext = path_1.default.extname(filename).toLowerCase();
+    const binaryExts = ['.png', '.jpg', '.jpeg', '.gif', '.ico', '.pdf', '.mp4', '.zip', '.tar', '.gz', '.jar', '.exe', '.dll', '.woff', '.woff2', '.ttf', '.eot', '.mp3', '.wav', '.pyc', '.pyo', '.pyd', '.so', '.dylib', '.class'];
+    const lockFiles = ['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml', 'composer.lock', 'poetry.lock', 'Gemfile.lock'];
+    if (binaryExts.includes(ext))
+        return true;
+    if (lockFiles.includes(path_1.default.basename(filename)))
+        return true;
+    return false;
+}
+/** Pack project codebase */
+function packProject(targetDir, outputFile, specificModule) {
+    const ignoreList = new Set(['node_modules', '.git', 'dist', 'build', 'out', '.next', 'vendor', '.cxf', 'docs', 'public', 'storage', 'tests', 'ci', 'bin', 'scripts', 'resources', 'config', 'database', 'bootstrap', '.idea', '.vscode', '.github']);
+    let packContent = `# Project Context Pack\nGenerated at: ${new Date().toISOString()}\n\n`;
+    let filesPacked = 0;
+    const startDir = specificModule ? path_1.default.join(targetDir, specificModule) : targetDir;
+    function traverse(dir) {
+        if (!fs_1.default.existsSync(dir))
+            return;
+        const entries = fs_1.default.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+            if (entry.name.startsWith('.'))
+                continue; // ignore all hidden dirs/files
+            if (ignoreList.has(entry.name))
+                continue;
+            const fullPath = path_1.default.join(dir, entry.name);
+            if (entry.isDirectory()) {
+                traverse(fullPath);
+            }
+            else if (entry.isFile()) {
+                if (!isBinaryFile(entry.name)) {
+                    try {
+                        const stat = fs_1.default.statSync(fullPath);
+                        if (stat.size > 1024 * 500)
+                            continue; // Skip files > 500KB
+                        const content = fs_1.default.readFileSync(fullPath, 'utf-8');
+                        const relativePath = path_1.default.relative(targetDir, fullPath).replace(/\\/g, '/');
+                        packContent += `\n## File: ${relativePath}\n\`\`\`\n${content}\n\`\`\`\n`;
+                        filesPacked++;
+                    }
+                    catch (e) { }
+                }
+            }
+        }
+    }
+    traverse(startDir);
+    fs_1.default.writeFileSync(outputFile, packContent);
+    return filesPacked;
+}
 // cxf init
 program
     .command('init [targetPath]')
@@ -179,8 +229,24 @@ program
         }
         catch (e) { }
     }
-    // Phase 5: Knowledge Generation (In Memory)
-    console.log(chalk_1.default.cyan('[Phase 5/7] Knowledge Generation (Tiến hành thu thập)...'));
+    if (!fs_1.default.existsSync(cxfDir))
+        fs_1.default.mkdirSync(cxfDir);
+    const knowledgeDir = path_1.default.join(cxfDir, 'knowledge');
+    const skillsDir = path_1.default.join(cxfDir, 'skills');
+    if (!fs_1.default.existsSync(knowledgeDir))
+        fs_1.default.mkdirSync(knowledgeDir, { recursive: true });
+    if (!fs_1.default.existsSync(skillsDir))
+        fs_1.default.mkdirSync(skillsDir, { recursive: true });
+    if (!fs_1.default.existsSync(path_1.default.join(cxfDir, 'rules')))
+        fs_1.default.mkdirSync(path_1.default.join(cxfDir, 'rules'), { recursive: true });
+    if (!fs_1.default.existsSync(path_1.default.join(cxfDir, '.cache')))
+        fs_1.default.mkdirSync(path_1.default.join(cxfDir, '.cache'), { recursive: true });
+    // Phase 5: Knowledge Generation (In Memory & Packing)
+    console.log(chalk_1.default.cyan('\n[Phase 5/7] Knowledge Generation (Tiến hành thu thập)...'));
+    console.log(chalk_1.default.dim('Đang tự động gom (pack) mã nguồn...'));
+    const packFile = path_1.default.join(knowledgeDir, 'context_pack.md');
+    const filesPacked = packProject(targetDir, packFile);
+    console.log(chalk_1.default.green(`✅ Đã đóng gói ${filesPacked} files vào context_pack.md`));
     // Phase 6: Human Review (or Auto)
     console.log(chalk_1.default.magenta.bold('\n[Phase 6/7] Review:'));
     const finalConventions = [];
@@ -213,18 +279,6 @@ program
     }
     // Phase 7: Publish
     console.log(chalk_1.default.cyan('\n[Phase 7/7] Publish (Xuất bản Knowledge Objects & Skills)...'));
-    if (!fs_1.default.existsSync(cxfDir))
-        fs_1.default.mkdirSync(cxfDir);
-    const knowledgeDir = path_1.default.join(cxfDir, 'knowledge');
-    const skillsDir = path_1.default.join(cxfDir, 'skills');
-    if (!fs_1.default.existsSync(knowledgeDir))
-        fs_1.default.mkdirSync(knowledgeDir);
-    if (!fs_1.default.existsSync(skillsDir))
-        fs_1.default.mkdirSync(skillsDir);
-    if (!fs_1.default.existsSync(path_1.default.join(cxfDir, 'rules')))
-        fs_1.default.mkdirSync(path_1.default.join(cxfDir, 'rules'));
-    if (!fs_1.default.existsSync(path_1.default.join(cxfDir, '.cache')))
-        fs_1.default.mkdirSync(path_1.default.join(cxfDir, '.cache'));
     // Ghi các Knowledge Objects (YAML) thay vì Markdown
     const architectureYaml = `id: architecture
 title: System Architecture
@@ -425,6 +479,29 @@ program
         console.log(chalk_1.default.yellow('ℹ️  Không phát hiện thư mục con nào trong src/.'));
     }
     console.log('Hoàn tất quá trình đồng bộ ngữ cảnh.');
+});
+// cxf pack
+program
+    .command('pack [module]')
+    .description('Gom toàn bộ mã nguồn của dự án (hoặc một module) thành một file context duy nhất cho AI')
+    .action((module) => {
+    console.log(chalk_1.default.blue('📦 Đang tiến hành gom (pack) mã nguồn...'));
+    const wrapperDir = process.cwd();
+    const cxfDir = path_1.default.join(wrapperDir, '.cxf');
+    let targetDir = wrapperDir;
+    const configPath = path_1.default.join(cxfDir, 'config.json');
+    if (fs_1.default.existsSync(configPath)) {
+        const config = JSON.parse(fs_1.default.readFileSync(configPath, 'utf-8'));
+        if (config.targetRepoPath) {
+            targetDir = path_1.default.resolve(wrapperDir, config.targetRepoPath);
+        }
+    }
+    const knowledgeDir = path_1.default.join(cxfDir, 'knowledge');
+    if (!fs_1.default.existsSync(knowledgeDir))
+        fs_1.default.mkdirSync(knowledgeDir, { recursive: true });
+    const outputFile = path_1.default.join(knowledgeDir, 'context_pack.md');
+    const filesPacked = packProject(targetDir, outputFile, module);
+    console.log(chalk_1.default.green(`✅ Đã đóng gói thành công ${filesPacked} files vào ${outputFile}`));
 });
 // cxf roi
 program

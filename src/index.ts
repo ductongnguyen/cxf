@@ -56,6 +56,55 @@ function discoverModules(targetDir: string): string[] {
   return getSubDirs(targetDir);
 }
 
+/** Check if file is binary or large lock file */
+function isBinaryFile(filename: string): boolean {
+  const ext = path.extname(filename).toLowerCase();
+  const binaryExts = ['.png', '.jpg', '.jpeg', '.gif', '.ico', '.pdf', '.mp4', '.zip', '.tar', '.gz', '.jar', '.exe', '.dll', '.woff', '.woff2', '.ttf', '.eot', '.mp3', '.wav', '.pyc', '.pyo', '.pyd', '.so', '.dylib', '.class'];
+  const lockFiles = ['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml', 'composer.lock', 'poetry.lock', 'Gemfile.lock'];
+  if (binaryExts.includes(ext)) return true;
+  if (lockFiles.includes(path.basename(filename))) return true;
+  return false;
+}
+
+/** Pack project codebase */
+function packProject(targetDir: string, outputFile: string, specificModule?: string) {
+  const ignoreList = new Set(['node_modules', '.git', 'dist', 'build', 'out', '.next', 'vendor', '.cxf', 'docs', 'public', 'storage', 'tests', 'ci', 'bin', 'scripts', 'resources', 'config', 'database', 'bootstrap', '.idea', '.vscode', '.github']);
+  
+  let packContent = `# Project Context Pack\nGenerated at: ${new Date().toISOString()}\n\n`;
+  let filesPacked = 0;
+
+  const startDir = specificModule ? path.join(targetDir, specificModule) : targetDir;
+
+  function traverse(dir: string) {
+    if (!fs.existsSync(dir)) return;
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue; // ignore all hidden dirs/files
+      if (ignoreList.has(entry.name)) continue;
+
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        traverse(fullPath);
+      } else if (entry.isFile()) {
+        if (!isBinaryFile(entry.name)) {
+           try {
+             const stat = fs.statSync(fullPath);
+             if (stat.size > 1024 * 500) continue; // Skip files > 500KB
+             const content = fs.readFileSync(fullPath, 'utf-8');
+             const relativePath = path.relative(targetDir, fullPath).replace(/\\/g, '/');
+             packContent += `\n## File: ${relativePath}\n\`\`\`\n${content}\n\`\`\`\n`;
+             filesPacked++;
+           } catch (e) {}
+        }
+      }
+    }
+  }
+
+  traverse(startDir);
+  fs.writeFileSync(outputFile, packContent);
+  return filesPacked;
+}
+
 // cxf init
 program
   .command('init [targetPath]')
@@ -173,8 +222,21 @@ program
       } catch (e) {}
     }
 
-    // Phase 5: Knowledge Generation (In Memory)
-    console.log(chalk.cyan('[Phase 5/7] Knowledge Generation (Tiến hành thu thập)...'));
+    if (!fs.existsSync(cxfDir)) fs.mkdirSync(cxfDir);
+    const knowledgeDir = path.join(cxfDir, 'knowledge');
+    const skillsDir = path.join(cxfDir, 'skills');
+    
+    if (!fs.existsSync(knowledgeDir)) fs.mkdirSync(knowledgeDir, { recursive: true });
+    if (!fs.existsSync(skillsDir)) fs.mkdirSync(skillsDir, { recursive: true });
+    if (!fs.existsSync(path.join(cxfDir, 'rules'))) fs.mkdirSync(path.join(cxfDir, 'rules'), { recursive: true });
+    if (!fs.existsSync(path.join(cxfDir, '.cache'))) fs.mkdirSync(path.join(cxfDir, '.cache'), { recursive: true });
+
+    // Phase 5: Knowledge Generation (In Memory & Packing)
+    console.log(chalk.cyan('\n[Phase 5/7] Knowledge Generation (Tiến hành thu thập)...'));
+    console.log(chalk.dim('Đang tự động gom (pack) mã nguồn...'));
+    const packFile = path.join(knowledgeDir, 'context_pack.md');
+    const filesPacked = packProject(targetDir, packFile);
+    console.log(chalk.green(`✅ Đã đóng gói ${filesPacked} files vào context_pack.md`));
     
     // Phase 6: Human Review (or Auto)
     console.log(chalk.magenta.bold('\n[Phase 6/7] Review:'));
@@ -208,15 +270,6 @@ program
     // Phase 7: Publish
     console.log(chalk.cyan('\n[Phase 7/7] Publish (Xuất bản Knowledge Objects & Skills)...'));
     
-    if (!fs.existsSync(cxfDir)) fs.mkdirSync(cxfDir);
-    const knowledgeDir = path.join(cxfDir, 'knowledge');
-    const skillsDir = path.join(cxfDir, 'skills');
-    
-    if (!fs.existsSync(knowledgeDir)) fs.mkdirSync(knowledgeDir);
-    if (!fs.existsSync(skillsDir)) fs.mkdirSync(skillsDir);
-    if (!fs.existsSync(path.join(cxfDir, 'rules'))) fs.mkdirSync(path.join(cxfDir, 'rules'));
-    if (!fs.existsSync(path.join(cxfDir, '.cache'))) fs.mkdirSync(path.join(cxfDir, '.cache'));
-
     // Ghi các Knowledge Objects (YAML) thay vì Markdown
     const architectureYaml = `id: architecture
 title: System Architecture
@@ -443,6 +496,32 @@ program
       console.log(chalk.yellow('ℹ️  Không phát hiện thư mục con nào trong src/.'));
     }
     console.log('Hoàn tất quá trình đồng bộ ngữ cảnh.');
+  });
+
+// cxf pack
+program
+  .command('pack [module]')
+  .description('Gom toàn bộ mã nguồn của dự án (hoặc một module) thành một file context duy nhất cho AI')
+  .action((module?: string) => {
+    console.log(chalk.blue('📦 Đang tiến hành gom (pack) mã nguồn...'));
+    const wrapperDir = process.cwd();
+    const cxfDir = path.join(wrapperDir, '.cxf');
+    let targetDir = wrapperDir;
+    
+    const configPath = path.join(cxfDir, 'config.json');
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      if (config.targetRepoPath) {
+        targetDir = path.resolve(wrapperDir, config.targetRepoPath);
+      }
+    }
+
+    const knowledgeDir = path.join(cxfDir, 'knowledge');
+    if (!fs.existsSync(knowledgeDir)) fs.mkdirSync(knowledgeDir, { recursive: true });
+    
+    const outputFile = path.join(knowledgeDir, 'context_pack.md');
+    const filesPacked = packProject(targetDir, outputFile, module);
+    console.log(chalk.green(`✅ Đã đóng gói thành công ${filesPacked} files vào ${outputFile}`));
   });
 
 // cxf roi

@@ -3,6 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import path from 'path';
 import fs from 'fs';
+import { execSync } from 'child_process';
 import { ContextManager } from "./context-manager/ContextManager";
 import { BlastRadiusAnalyzer } from "./context-manager/DependencyAnalyzer";
 
@@ -75,6 +76,16 @@ export async function runDaemon() {
             },
             required: ["filePath"]
           }
+        },
+        {
+          name: "cxf_pack",
+          description: "Gom toàn bộ mã nguồn của dự án (hoặc một module) thành một file context duy nhất (context_pack.md) cho AI.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              module: { type: "string", description: "Tên module muốn pack (vd: src/auth). Để trống nếu muốn pack toàn bộ dự án." }
+            }
+          }
         }
       ]
     };
@@ -108,7 +119,6 @@ export async function runDaemon() {
     }
 
     if (request.params.name === "cxf_learn_context") {
-      // Import MemoryManager dynamically or we could import it at the top
       const { MemoryManager } = require('./context-manager/MemoryManager');
       const memory = new MemoryManager(cxfDir);
       const args = request.params.arguments as { domain: string, content: string };
@@ -143,15 +153,30 @@ export async function runDaemon() {
       const impact = analyzer.getImpactRadius(args.filePath, args.depth || 2);
       const stats = analyzer.getStats();
 
-      let result = `💥 Blast-Radius Analysis cho [${args.filePath}]:\n`;
-      result += `- Quét ${stats.filesScanned} files, ${stats.uniqueDependenciesTracked} dependencies.\n\n`;
-      if (impact.tests.length) result += `🧪 Tests bị ảnh hưởng:\n${impact.tests.map(f => '  - ' + f).join('\n')}\n\n`;
-      if (impact.direct.length) result += `⚡ Direct Dependents:\n${impact.direct.map(f => '  - ' + f).join('\n')}\n\n`;
-      if (impact.indirect.length) result += `🔗 Indirect Dependents:\n${impact.indirect.map(f => '  - ' + f).join('\n')}\n\n`;
-      if (!impact.tests.length && !impact.direct.length && !impact.indirect.length) {
-        result += `✅ Không có file nào phụ thuộc vào file này.`;
+      let result = `Blast-Radius Analysis cho ${args.filePath} (Depth: ${args.depth || 2})\n`;
+      result += `Đã quét ${stats.filesScanned} files, theo dõi ${stats.uniqueDependenciesTracked} dependencies.\n\n`;
+      if (impact.tests.length > 0) result += `🧪 Tests bị ảnh hưởng:\n${impact.tests.map((f: string) => `- ${f}`).join('\n')}\n\n`;
+      if (impact.direct.length > 0) result += `⚡ Direct Dependents:\n${impact.direct.map((f: string) => `- ${f}`).join('\n')}\n\n`;
+      if (impact.indirect.length > 0) result += `🔗 Indirect Dependents:\n${impact.indirect.map((f: string) => `- ${f}`).join('\n')}\n\n`;
+      if (impact.tests.length === 0 && impact.direct.length === 0 && impact.indirect.length === 0) {
+        result += `✅ File này dường như không bị ai phụ thuộc (Safe to change).`;
       }
       return { content: [{ type: "text", text: result }] };
+    } else if (request.params.name === "cxf_pack") {
+      const args = request.params.arguments as any;
+      const cliPath = path.join(__dirname, 'index.js');
+      
+      let cmd = `node "${cliPath}" pack`;
+      if (args.module) {
+        cmd += ` "${args.module}"`;
+      }
+
+      try {
+        const stdout = execSync(cmd, { cwd: targetDir, encoding: 'utf8' });
+        return { content: [{ type: "text", text: `Đã chạy cxf pack thành công:\n${stdout}\nĐường dẫn file: .cxf/knowledge/context_pack.md` }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Lỗi khi chạy cxf pack: ${e.message}` }] };
+      }
     }
 
     throw new Error("Tool not found");
