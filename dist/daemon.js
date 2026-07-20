@@ -10,6 +10,7 @@ const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const ContextManager_1 = require("./context-manager/ContextManager");
+const DependencyAnalyzer_1 = require("./context-manager/DependencyAnalyzer");
 async function runDaemon() {
     const server = new index_js_1.Server({
         name: "cxf-daemon",
@@ -62,6 +63,18 @@ async function runDaemon() {
                         properties: {},
                         required: []
                     }
+                },
+                {
+                    name: "cxf_get_impact_radius",
+                    description: "Phân tích bán kính ảnh hưởng (Blast-Radius) của một file. Giúp AI biết được những file nào gọi đến nó để tránh break code.",
+                    inputSchema: {
+                        type: "object",
+                        properties: {
+                            filePath: { type: "string", description: "Tên file (hoặc đường dẫn) cần phân tích." },
+                            depth: { type: "number", description: "Độ sâu phân tích. Mặc định là 2." }
+                        },
+                        required: ["filePath"]
+                    }
                 }
             ]
         };
@@ -103,6 +116,36 @@ async function runDaemon() {
                 return { content: [{ type: "text", text: content }] };
             }
             return { content: [{ type: "text", text: "Chưa có dữ liệu metrics." }] };
+        }
+        if (request.params.name === "cxf_get_impact_radius") {
+            const args = request.params.arguments;
+            const configPath = path_1.default.join(cxfDir, 'config.json');
+            let actualTargetDir = targetDir;
+            if (fs_1.default.existsSync(configPath)) {
+                const config = JSON.parse(fs_1.default.readFileSync(configPath, 'utf-8'));
+                if (config.targetRepoPath)
+                    actualTargetDir = path_1.default.resolve(targetDir, config.targetRepoPath);
+            }
+            const srcDir = path_1.default.join(actualTargetDir, 'src');
+            if (!fs_1.default.existsSync(srcDir)) {
+                return { content: [{ type: "text", text: "Không tìm thấy thư mục src/ để quét." }] };
+            }
+            const analyzer = new DependencyAnalyzer_1.BlastRadiusAnalyzer(srcDir);
+            analyzer.buildGraph();
+            const impact = analyzer.getImpactRadius(args.filePath, args.depth || 2);
+            const stats = analyzer.getStats();
+            let result = `💥 Blast-Radius Analysis cho [${args.filePath}]:\n`;
+            result += `- Quét ${stats.filesScanned} files, ${stats.uniqueDependenciesTracked} dependencies.\n\n`;
+            if (impact.tests.length)
+                result += `🧪 Tests bị ảnh hưởng:\n${impact.tests.map(f => '  - ' + f).join('\n')}\n\n`;
+            if (impact.direct.length)
+                result += `⚡ Direct Dependents:\n${impact.direct.map(f => '  - ' + f).join('\n')}\n\n`;
+            if (impact.indirect.length)
+                result += `🔗 Indirect Dependents:\n${impact.indirect.map(f => '  - ' + f).join('\n')}\n\n`;
+            if (!impact.tests.length && !impact.direct.length && !impact.indirect.length) {
+                result += `✅ Không có file nào phụ thuộc vào file này.`;
+            }
+            return { content: [{ type: "text", text: result }] };
         }
         throw new Error("Tool not found");
     });

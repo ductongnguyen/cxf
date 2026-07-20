@@ -8,6 +8,7 @@ import readline from 'readline';
 import { runDaemon } from './daemon';
 import { RoiAnalyzer } from './context-manager/RoiAnalyzer';
 import { MemoryManager } from './context-manager/MemoryManager';
+import { BlastRadiusAnalyzer } from './context-manager/DependencyAnalyzer';
 
 const program = new Command();
 
@@ -472,6 +473,60 @@ daemonCommand
   .description('Chạy máy chủ CXF trên stdio để kết nối với AI')
   .action(async () => {
     await runDaemon();
+  });
+
+// cxf impact
+program
+  .command('impact <filePath>')
+  .description('Phân tích bán kính ảnh hưởng (Blast-Radius) của một file')
+  .option('-d, --depth <number>', 'Độ sâu phân tích', '2')
+  .action((filePath: string, options: { depth: string }) => {
+    const wrapperDir = process.cwd();
+    const cxfDir = path.join(wrapperDir, '.cxf');
+    let targetDir = wrapperDir;
+    
+    const configPath = path.join(cxfDir, 'config.json');
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      if (config.targetRepoPath) {
+        targetDir = path.resolve(wrapperDir, config.targetRepoPath);
+      }
+    }
+
+    const srcDir = path.join(targetDir, 'src');
+    if (!fs.existsSync(srcDir)) {
+      console.log(chalk.red(`❌ Không tìm thấy thư mục src/ tại ${targetDir}.`));
+      return;
+    }
+
+    console.log(chalk.blue(`💥 Đang phân tích Blast-Radius cho: ${chalk.bold(filePath)}...`));
+    const analyzer = new BlastRadiusAnalyzer(srcDir);
+    analyzer.buildGraph();
+
+    const depth = parseInt(options.depth) || 2;
+    const impact = analyzer.getImpactRadius(filePath, depth);
+    const stats = analyzer.getStats();
+
+    console.log(chalk.dim(`Đã quét ${stats.filesScanned} files, theo dõi ${stats.uniqueDependenciesTracked} dependencies.`));
+    
+    if (impact.tests.length > 0) {
+      console.log(chalk.green.bold(`\n🧪 Tests bị ảnh hưởng (${impact.tests.length}):`));
+      impact.tests.forEach(f => console.log(`  - ${f}`));
+    }
+    
+    if (impact.direct.length > 0) {
+      console.log(chalk.yellow.bold(`\n⚡ Direct Dependents (Gọi trực tiếp) (${impact.direct.length}):`));
+      impact.direct.forEach(f => console.log(`  - ${f}`));
+    }
+
+    if (impact.indirect.length > 0) {
+      console.log(chalk.yellow(`\n🔗 Indirect Dependents (Bị ảnh hưởng gián tiếp) (${impact.indirect.length}):`));
+      impact.indirect.forEach(f => console.log(`  - ${f}`));
+    }
+
+    if (impact.tests.length === 0 && impact.direct.length === 0 && impact.indirect.length === 0) {
+      console.log(chalk.green('✅ File này dường như không bị ai phụ thuộc (Safe to change).'));
+    }
   });
 
 program.parse(process.argv);

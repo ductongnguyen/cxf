@@ -12,6 +12,7 @@ const readline_1 = __importDefault(require("readline"));
 const daemon_1 = require("./daemon");
 const RoiAnalyzer_1 = require("./context-manager/RoiAnalyzer");
 const MemoryManager_1 = require("./context-manager/MemoryManager");
+const DependencyAnalyzer_1 = require("./context-manager/DependencyAnalyzer");
 const program = new commander_1.Command();
 program
     .name('cxf')
@@ -443,5 +444,49 @@ daemonCommand
     .description('Chạy máy chủ CXF trên stdio để kết nối với AI')
     .action(async () => {
     await (0, daemon_1.runDaemon)();
+});
+// cxf impact
+program
+    .command('impact <filePath>')
+    .description('Phân tích bán kính ảnh hưởng (Blast-Radius) của một file')
+    .option('-d, --depth <number>', 'Độ sâu phân tích', '2')
+    .action((filePath, options) => {
+    const wrapperDir = process.cwd();
+    const cxfDir = path_1.default.join(wrapperDir, '.cxf');
+    let targetDir = wrapperDir;
+    const configPath = path_1.default.join(cxfDir, 'config.json');
+    if (fs_1.default.existsSync(configPath)) {
+        const config = JSON.parse(fs_1.default.readFileSync(configPath, 'utf-8'));
+        if (config.targetRepoPath) {
+            targetDir = path_1.default.resolve(wrapperDir, config.targetRepoPath);
+        }
+    }
+    const srcDir = path_1.default.join(targetDir, 'src');
+    if (!fs_1.default.existsSync(srcDir)) {
+        console.log(chalk_1.default.red(`❌ Không tìm thấy thư mục src/ tại ${targetDir}.`));
+        return;
+    }
+    console.log(chalk_1.default.blue(`💥 Đang phân tích Blast-Radius cho: ${chalk_1.default.bold(filePath)}...`));
+    const analyzer = new DependencyAnalyzer_1.BlastRadiusAnalyzer(srcDir);
+    analyzer.buildGraph();
+    const depth = parseInt(options.depth) || 2;
+    const impact = analyzer.getImpactRadius(filePath, depth);
+    const stats = analyzer.getStats();
+    console.log(chalk_1.default.dim(`Đã quét ${stats.filesScanned} files, theo dõi ${stats.uniqueDependenciesTracked} dependencies.`));
+    if (impact.tests.length > 0) {
+        console.log(chalk_1.default.green.bold(`\n🧪 Tests bị ảnh hưởng (${impact.tests.length}):`));
+        impact.tests.forEach(f => console.log(`  - ${f}`));
+    }
+    if (impact.direct.length > 0) {
+        console.log(chalk_1.default.yellow.bold(`\n⚡ Direct Dependents (Gọi trực tiếp) (${impact.direct.length}):`));
+        impact.direct.forEach(f => console.log(`  - ${f}`));
+    }
+    if (impact.indirect.length > 0) {
+        console.log(chalk_1.default.yellow(`\n🔗 Indirect Dependents (Bị ảnh hưởng gián tiếp) (${impact.indirect.length}):`));
+        impact.indirect.forEach(f => console.log(`  - ${f}`));
+    }
+    if (impact.tests.length === 0 && impact.direct.length === 0 && impact.indirect.length === 0) {
+        console.log(chalk_1.default.green('✅ File này dường như không bị ai phụ thuộc (Safe to change).'));
+    }
 });
 program.parse(process.argv);
