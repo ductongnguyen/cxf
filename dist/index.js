@@ -63,19 +63,24 @@ program
         framework = 'PHP/Laravel';
     console.log(`> Detected Stack: ${chalk_1.default.green(framework)}`);
     // Phase 3 & 4: Module & Convention Detection
-    console.log(chalk_1.default.cyan('[Phase 3 & 4/7] Module & Convention Detection...'));
+    console.log(chalk_1.default.cyan('\n[Phase 3 & 4/7] Module & Convention Detection...'));
     const detectedModules = [];
-    const detectedConventions = [];
-    // Real Module Detection
-    const possibleSrcDirs = ['src', 'app', 'lib', 'pkg', 'cmd'];
-    for (const dir of possibleSrcDirs) {
-        const fullPath = path_1.default.join(targetDir, dir);
-        if (fs_1.default.existsSync(fullPath)) {
-            const entries = fs_1.default.readdirSync(fullPath, { withFileTypes: true });
-            const subDirs = entries.filter(e => e.isDirectory()).map(e => e.name);
-            detectedModules.push(...subDirs);
+    if (fs_1.default.existsSync(targetDir)) {
+        const entries = fs_1.default.readdirSync(targetDir, { withFileTypes: true });
+        for (const entry of entries) {
+            if (entry.isDirectory() && !['node_modules', '.git', 'dist', 'build', 'out', '.next', 'vendor', '.cxf'].includes(entry.name)) {
+                detectedModules.push(entry.name);
+            }
         }
     }
+    // Fallback: nếu không thấy module nào, có thể fallback
+    if (detectedModules.length > 0) {
+        console.log(chalk_1.default.green(`✅ Đã tìm thấy ${detectedModules.length} modules tiềm năng.`));
+    }
+    else {
+        console.log(chalk_1.default.yellow(`⚠️ Không tìm thấy thư mục module nào.`));
+    }
+    const detectedConventions = [];
     // Real Convention Inference & Code Style Extraction
     const codeStyles = [];
     if (hasPackageJson) {
@@ -257,7 +262,7 @@ tags: [rules, guardrails]
     if (finalConventions.includes('Django Framework')) {
         globalRules += `## ${ruleIndex++}. Django Architecture\n`;
         globalRules += `- Không viết logic vào Views, hãy đưa logic vào Services hoặc Models (Fat Models, Thin Views).\n`;
-        globalRules += `- Tránh N+1 queries bằng cách sử dụng \`select_related\` và \`prefetch_related\`.\n\n`;
+        globalRules += `- Tránh N+1 queries bằng cách sử dụng \`select_related\` và \`prefetch_related\`. \n\n`;
     }
     if (finalConventions.includes('Golang Standard Layout')) {
         globalRules += `## ${ruleIndex++}. Golang Best Practices\n`;
@@ -356,18 +361,22 @@ program
             targetDir = path_1.default.resolve(wrapperDir, config.targetRepoPath);
         }
     }
-    const srcDir = path_1.default.join(targetDir, 'src');
-    console.log(chalk_1.default.dim(`Quét hệ thống file tại ${srcDir}...`));
+    console.log(chalk_1.default.dim(`Quét hệ thống file tại ${targetDir}...`));
     const knowledgeDir = path_1.default.join(cxfDir, 'knowledge');
-    if (!fs_1.default.existsSync(srcDir)) {
-        console.log(chalk_1.default.yellow('⚠️  Không tìm thấy thư mục src/. Bỏ qua việc quét module.'));
+    if (!fs_1.default.existsSync(targetDir)) {
+        console.log(chalk_1.default.yellow(`⚠️  Không tìm thấy thư mục ${targetDir}. Bỏ qua việc quét module.`));
         return;
     }
     if (!fs_1.default.existsSync(knowledgeDir)) {
         fs_1.default.mkdirSync(knowledgeDir, { recursive: true });
     }
-    const entries = fs_1.default.readdirSync(srcDir, { withFileTypes: true });
-    const modules = entries.filter(e => e.isDirectory()).map(e => e.name);
+    const entries = fs_1.default.readdirSync(targetDir, { withFileTypes: true });
+    const modules = [];
+    for (const entry of entries) {
+        if (entry.isDirectory() && !['node_modules', '.git', 'dist', 'build', 'out', '.next', 'vendor', '.cxf'].includes(entry.name)) {
+            modules.push(entry.name);
+        }
+    }
     if (modules.length > 0) {
         console.log(chalk_1.default.green(`✅ Phát hiện ${modules.length} module: ${modules.join(', ')}`));
         const syncYaml = `id: sync_modules\ntitle: Dynamically Synced Modules\npriority: 700\ntags: [sync, auto]\nmodules:\n${modules.map(m => `  - ${m}`).join('\n')}\n`;
@@ -461,13 +470,12 @@ program
             targetDir = path_1.default.resolve(wrapperDir, config.targetRepoPath);
         }
     }
-    const srcDir = path_1.default.join(targetDir, 'src');
-    if (!fs_1.default.existsSync(srcDir)) {
-        console.log(chalk_1.default.red(`❌ Không tìm thấy thư mục src/ tại ${targetDir}.`));
+    if (!fs_1.default.existsSync(targetDir)) {
+        console.log(chalk_1.default.red(`❌ Không tìm thấy thư mục tại ${targetDir}.`));
         return;
     }
     console.log(chalk_1.default.blue(`💥 Đang phân tích Blast-Radius cho: ${chalk_1.default.bold(filePath)}...`));
-    const analyzer = new DependencyAnalyzer_1.BlastRadiusAnalyzer(srcDir);
+    const analyzer = new DependencyAnalyzer_1.BlastRadiusAnalyzer(targetDir);
     analyzer.buildGraph();
     const depth = parseInt(options.depth) || 2;
     const impact = analyzer.getImpactRadius(filePath, depth);

@@ -126,11 +126,10 @@ async function runDaemon() {
                 if (config.targetRepoPath)
                     actualTargetDir = path_1.default.resolve(targetDir, config.targetRepoPath);
             }
-            const srcDir = path_1.default.join(actualTargetDir, 'src');
-            if (!fs_1.default.existsSync(srcDir)) {
-                return { content: [{ type: "text", text: "Không tìm thấy thư mục src/ để quét." }] };
+            if (!fs_1.default.existsSync(actualTargetDir)) {
+                return { content: [{ type: "text", text: `Không tìm thấy thư mục tại ${actualTargetDir}.` }] };
             }
-            const analyzer = new DependencyAnalyzer_1.BlastRadiusAnalyzer(srcDir);
+            const analyzer = new DependencyAnalyzer_1.BlastRadiusAnalyzer(actualTargetDir);
             analyzer.buildGraph();
             const impact = analyzer.getImpactRadius(args.filePath, args.depth || 2);
             const stats = analyzer.getStats();

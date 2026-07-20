@@ -64,20 +64,25 @@ program
     console.log(`> Detected Stack: ${chalk.green(framework)}`);
 
     // Phase 3 & 4: Module & Convention Detection
-    console.log(chalk.cyan('[Phase 3 & 4/7] Module & Convention Detection...'));
+    console.log(chalk.cyan('\n[Phase 3 & 4/7] Module & Convention Detection...'));
     const detectedModules: string[] = [];
-    const detectedConventions: { name: string, confidence: number }[] = [];
-
-    // Real Module Detection
-    const possibleSrcDirs = ['src', 'app', 'lib', 'pkg', 'cmd'];
-    for (const dir of possibleSrcDirs) {
-      const fullPath = path.join(targetDir, dir);
-      if (fs.existsSync(fullPath)) {
-        const entries = fs.readdirSync(fullPath, { withFileTypes: true });
-        const subDirs = entries.filter(e => e.isDirectory()).map(e => e.name);
-        detectedModules.push(...subDirs);
+    if (fs.existsSync(targetDir)) {
+      const entries = fs.readdirSync(targetDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory() && !['node_modules', '.git', 'dist', 'build', 'out', '.next', 'vendor', '.cxf'].includes(entry.name)) {
+          detectedModules.push(entry.name);
+        }
       }
     }
+    
+    // Fallback: nếu không thấy module nào, có thể fallback
+    if (detectedModules.length > 0) {
+      console.log(chalk.green(`✅ Đã tìm thấy ${detectedModules.length} modules tiềm năng.`));
+    } else {
+      console.log(chalk.yellow(`⚠️ Không tìm thấy thư mục module nào.`));
+    }
+
+    const detectedConventions: { name: string, confidence: number }[] = [];
 
     // Real Convention Inference & Code Style Extraction
     const codeStyles: string[] = [];
@@ -261,7 +266,7 @@ tags: [rules, guardrails]
     if (finalConventions.includes('Django Framework')) {
       globalRules += `## ${ruleIndex++}. Django Architecture\n`;
       globalRules += `- Không viết logic vào Views, hãy đưa logic vào Services hoặc Models (Fat Models, Thin Views).\n`;
-      globalRules += `- Tránh N+1 queries bằng cách sử dụng \`select_related\` và \`prefetch_related\`.\n\n`;
+      globalRules += `- Tránh N+1 queries bằng cách sử dụng \`select_related\` và \`prefetch_related\`. \n\n`;
     }
 
     if (finalConventions.includes('Golang Standard Layout')) {
@@ -372,20 +377,24 @@ program
       }
     }
     
-    const srcDir = path.join(targetDir, 'src');
-    console.log(chalk.dim(`Quét hệ thống file tại ${srcDir}...`));
+    console.log(chalk.dim(`Quét hệ thống file tại ${targetDir}...`));
     const knowledgeDir = path.join(cxfDir, 'knowledge');
     
-    if (!fs.existsSync(srcDir)) {
-      console.log(chalk.yellow('⚠️  Không tìm thấy thư mục src/. Bỏ qua việc quét module.'));
+    if (!fs.existsSync(targetDir)) {
+      console.log(chalk.yellow(`⚠️  Không tìm thấy thư mục ${targetDir}. Bỏ qua việc quét module.`));
       return;
     }
     if (!fs.existsSync(knowledgeDir)) {
       fs.mkdirSync(knowledgeDir, { recursive: true });
     }
     
-    const entries = fs.readdirSync(srcDir, { withFileTypes: true });
-    const modules = entries.filter(e => e.isDirectory()).map(e => e.name);
+    const entries = fs.readdirSync(targetDir, { withFileTypes: true });
+    const modules = [];
+    for (const entry of entries) {
+      if (entry.isDirectory() && !['node_modules', '.git', 'dist', 'build', 'out', '.next', 'vendor', '.cxf'].includes(entry.name)) {
+        modules.push(entry.name);
+      }
+    }
     
     if (modules.length > 0) {
       console.log(chalk.green(`✅ Phát hiện ${modules.length} module: ${modules.join(', ')}`));
@@ -493,14 +502,13 @@ program
       }
     }
 
-    const srcDir = path.join(targetDir, 'src');
-    if (!fs.existsSync(srcDir)) {
-      console.log(chalk.red(`❌ Không tìm thấy thư mục src/ tại ${targetDir}.`));
+    if (!fs.existsSync(targetDir)) {
+      console.log(chalk.red(`❌ Không tìm thấy thư mục tại ${targetDir}.`));
       return;
     }
 
     console.log(chalk.blue(`💥 Đang phân tích Blast-Radius cho: ${chalk.bold(filePath)}...`));
-    const analyzer = new BlastRadiusAnalyzer(srcDir);
+    const analyzer = new BlastRadiusAnalyzer(targetDir);
     analyzer.buildGraph();
 
     const depth = parseInt(options.depth) || 2;

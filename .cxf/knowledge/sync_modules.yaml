@@ -3,4 +3,4 @@ title: Dynamically Synced Modules
 priority: 700
 tags: [sync, auto]
 modules:
-  - context-manager
+  - src

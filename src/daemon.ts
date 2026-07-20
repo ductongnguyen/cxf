@@ -134,12 +134,11 @@ export async function runDaemon() {
         if (config.targetRepoPath) actualTargetDir = path.resolve(targetDir, config.targetRepoPath);
       }
       
-      const srcDir = path.join(actualTargetDir, 'src');
-      if (!fs.existsSync(srcDir)) {
-        return { content: [{ type: "text", text: "Không tìm thấy thư mục src/ để quét." }] };
+      if (!fs.existsSync(actualTargetDir)) {
+        return { content: [{ type: "text", text: `Không tìm thấy thư mục tại ${actualTargetDir}.` }] };
       }
       
-      const analyzer = new BlastRadiusAnalyzer(srcDir);
+      const analyzer = new BlastRadiusAnalyzer(actualTargetDir);
       analyzer.buildGraph();
       const impact = analyzer.getImpactRadius(args.filePath, args.depth || 2);
       const stats = analyzer.getStats();

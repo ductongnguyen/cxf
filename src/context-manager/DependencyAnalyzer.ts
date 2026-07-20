@@ -52,8 +52,10 @@ export class BlastRadiusAnalyzer {
     if (!fs.existsSync(dir)) return;
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     
+    const ignoreList = new Set(['node_modules', '.git', 'dist', 'build', 'out', '.next', 'vendor', '.cxf']);
+    
     for (const entry of entries) {
-      if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'dist' || entry.name === '.cxf') continue;
+      if (ignoreList.has(entry.name)) continue;
       
       const fullPath = path.join(dir, entry.name);
       

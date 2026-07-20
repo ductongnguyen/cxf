@@ -55,8 +55,9 @@ class BlastRadiusAnalyzer {
         if (!fs_1.default.existsSync(dir))
             return;
         const entries = fs_1.default.readdirSync(dir, { withFileTypes: true });
+        const ignoreList = new Set(['node_modules', '.git', 'dist', 'build', 'out', '.next', 'vendor', '.cxf']);
         for (const entry of entries) {
-            if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'dist' || entry.name === '.cxf')
+            if (ignoreList.has(entry.name))
                 continue;
             const fullPath = path_1.default.join(dir, entry.name);
             if (entry.isDirectory()) {
