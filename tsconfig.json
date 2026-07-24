@@ -10,5 +10,7 @@
     "types": [
       "node"
     ]
-  }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["tests", "dist", "node_modules"]
 }
