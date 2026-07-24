@@ -513,6 +513,23 @@ program
     const analyzer = new RoiAnalyzer_1.RoiAnalyzer(cxfDir);
     analyzer.runAnalysis();
 });
+// cxf metrics [--live]
+program
+    .command('metrics')
+    .description('Hiển thị báo cáo Telemetry, Context ROI và Attention Leakage theo thời gian thực')
+    .option('-l, --live', 'Bật giao diện Live TUI Inspector cập nhật liên tục')
+    .action((options) => {
+    const targetDir = process.cwd();
+    const cxfDir = path_1.default.join(targetDir, '.cxf');
+    const { TuiDashboard } = require('./context-manager/TuiDashboard');
+    const dashboard = new TuiDashboard(cxfDir);
+    if (options.live) {
+        dashboard.startLiveDashboard();
+    }
+    else {
+        dashboard.renderOnce();
+    }
+});
 // cxf learn <domain> <content>
 program
     .command('learn <domain> <content>')
