@@ -380,67 +380,6 @@ tags: [rules, guardrails]
         globalRules += `\n`;
     }
     fs_1.default.writeFileSync(path_1.default.join(cxfDir, 'rules', 'global.md'), globalRules);
-    // Sinh 4 Kỹ năng Mặc định (Default Skills)
-    const planSkill = `---
-id: plan-task
-title: Quy trình Lên Kế hoạch Task
-priority: 960
-type: skill
-triggers: [plan, design, architecture, propose]
----
-# Hướng dẫn Lên Kế hoạch Task (Planning)
-1. BẮT BUỘC ĐẦU TIÊN: Gọi MCP Tool \`cxf_get_optimized_context\` (hoặc phân tích context tương tự) với từ khóa nhiệm vụ để lấy bối cảnh kiến trúc/mã nguồn trước khi nghĩ.
-2. Tuyệt đối KHÔNG viết code ở bước này.
-3. Đọc lướt yêu cầu người dùng và các Knowledge Objects liên quan.
-4. Phác thảo kế hoạch triển khai (Implementation Plan) chia thành các bước nhỏ gọn.
-5. Dừng lại và chờ người dùng duyệt kế hoạch trước khi chuyển sang kỹ năng \`implement-task\`.
-`;
-    fs_1.default.writeFileSync(path_1.default.join(skillsDir, 'plan-task.md'), planSkill);
-    const taskSkill = `---
-id: implement-task
-title: Quy trình Làm Task
-priority: 950
-type: skill
-triggers: [implement, build, create, task, feature]
----
-# Hướng dẫn Xây dựng Tính năng (Làm Task)
-1. BẮT BUỘC ĐẦU TIÊN: Gọi MCP Tool \`cxf_get_optimized_context\` để xin cấp phát bộ ngữ cảnh (context) đầy đủ cho task này nếu chưa có.
-2. Đọc kỹ yêu cầu (Intent) và Context được trả về.
-3. Không bắt đầu viết code ngay. Hãy phác thảo kiến trúc nhỏ (Draft) trước nếu task phức tạp.
-4. Viết code tuần tự, đảm bảo chạy linter hoặc test sau mỗi thay đổi lớn.
-5. Nhớ gọi Tool \`cxf_learn_context\` nếu bạn vừa giải quyết một bug khó hoặc chốt một quy ước mới để dạy lại cho AI.
-6. Cập nhật Knowledge Object (chạy \`cxf sync\`) nếu bạn vừa thêm module mới.
-`;
-    fs_1.default.writeFileSync(path_1.default.join(skillsDir, 'implement-task.md'), taskSkill);
-    const reviewSkill = `---
-id: code-review
-title: Quy trình Code Review
-priority: 900
-type: skill
-triggers: [review, audit, pr, check]
----
-# Hướng dẫn Code Review
-1. Đọc lướt các file bị thay đổi.
-2. Kiểm tra các lỗi bảo mật (đảm bảo không hardcode secret).
-3. Đánh giá Big-O (độ phức tạp thuật toán) của các vòng lặp.
-4. So sánh với Convention trong \`architecture.yaml\`.
-5. Đề xuất refactor (nếu có).
-`;
-    fs_1.default.writeFileSync(path_1.default.join(skillsDir, 'code-review.md'), reviewSkill);
-    const testSkill = `---
-id: write-tests
-title: Quy trình Viết Tests
-priority: 850
-type: skill
-triggers: [test, coverage, jest, unit test]
----
-# Hướng dẫn Viết Unit Tests
-1. Đọc hiểu logic của hàm cần test.
-2. Viết các test case cho Happy Path.
-3. Viết các test case cho Edge Cases (dữ liệu rỗng, undefined, sai kiểu).
-4. Sử dụng Mock cho mọi tương tác IO/Database/Network.
-`;
-    fs_1.default.writeFileSync(path_1.default.join(skillsDir, 'write-tests.md'), testSkill);
     console.log(chalk_1.default.green.bold('🎉 Khởi tạo hoàn tất! Knowledge Objects và Skills đã được tạo trong .cxf/'));
 });
 // cxf sync
