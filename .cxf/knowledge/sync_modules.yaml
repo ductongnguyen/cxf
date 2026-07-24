@@ -1,6 +1,0 @@
-id: sync_modules
-title: Dynamically Synced Modules
-priority: 700
-tags: [sync, auto]
-modules:
-  - src
