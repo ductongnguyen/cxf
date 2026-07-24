@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { TaskIntent } from './IntentAnalyzer';
 import { ContextObject } from './ContextObject';
+import { TelemetryManager } from './TelemetryManager';
 
 export interface ContextLog {
   taskId: string;
@@ -13,20 +14,25 @@ export interface ContextLog {
 
 export class MetricsLogger {
   private logFile: string;
+  private cxfDir: string;
+  private telemetryManager: TelemetryManager;
 
   constructor(cxfDir: string) {
+    this.cxfDir = cxfDir;
     const cacheDir = path.join(cxfDir, '.cache');
     if (!fs.existsSync(cacheDir)) {
       fs.mkdirSync(cacheDir, { recursive: true });
     }
     this.logFile = path.join(cacheDir, 'metrics.json');
+    this.telemetryManager = new TelemetryManager(cxfDir);
   }
 
   public logContextSelection(
     taskId: string,
     intent: TaskIntent,
     finalObjects: ContextObject[],
-    totalTokens: number
+    totalTokens: number,
+    maxBudget = 4000
   ) {
     const selectedFiles = finalObjects.map(obj => obj.sourcePath);
 
@@ -50,5 +56,9 @@ export class MetricsLogger {
 
     existingLogs.push(logEntry);
     fs.writeFileSync(this.logFile, JSON.stringify(existingLogs, null, 2));
+
+    // Delegate async non-blocking telemetry event logging
+    this.telemetryManager.logTelemetryEvent(taskId, intent, finalObjects, totalTokens, maxBudget);
   }
 }
+
