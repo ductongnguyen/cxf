@@ -127,12 +127,10 @@ export async function runDaemon() {
     }
 
     if (request.params.name === "cxf_get_metrics") {
-      const metricsFile = path.join(cxfDir, '.cache', 'metrics.json');
-      if (fs.existsSync(metricsFile)) {
-        const content = fs.readFileSync(metricsFile, 'utf-8');
-        return { content: [{ type: "text", text: content }] };
-      }
-      return { content: [{ type: "text", text: "Chưa có dữ liệu metrics." }] };
+      const { TelemetryManager } = require('./context-manager/TelemetryManager');
+      const manager = new TelemetryManager(cxfDir);
+      const metricsSummary = manager.getMetricsSummary();
+      return { content: [{ type: "text", text: JSON.stringify(metricsSummary, null, 2) }] };
     }
 
     if (request.params.name === "cxf_get_impact_radius") {

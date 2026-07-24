@@ -120,12 +120,10 @@ async function runDaemon() {
             return { content: [{ type: "text", text: `Đã lưu trí nhớ thành công! ID: ${result.id}` }] };
         }
         if (request.params.name === "cxf_get_metrics") {
-            const metricsFile = path_1.default.join(cxfDir, '.cache', 'metrics.json');
-            if (fs_1.default.existsSync(metricsFile)) {
-                const content = fs_1.default.readFileSync(metricsFile, 'utf-8');
-                return { content: [{ type: "text", text: content }] };
-            }
-            return { content: [{ type: "text", text: "Chưa có dữ liệu metrics." }] };
+            const { TelemetryManager } = require('./context-manager/TelemetryManager');
+            const manager = new TelemetryManager(cxfDir);
+            const metricsSummary = manager.getMetricsSummary();
+            return { content: [{ type: "text", text: JSON.stringify(metricsSummary, null, 2) }] };
         }
         if (request.params.name === "cxf_get_impact_radius") {
             const args = request.params.arguments;
