@@ -1,7 +1,0 @@
-apiVersion: cxf/v1
-kind: ContextPolicy
-metadata:
-  name: default-policy
-spec:
-  providers:
-    - type: local-fs
